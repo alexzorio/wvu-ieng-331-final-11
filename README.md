@@ -1,4 +1,4 @@
-#Final Project: Complete Data Product
+# Final Project: Complete Data Product
 Team 11: [Alexander Zorio], [Tanzim Raffi]
 
 ## Final Deliverables
