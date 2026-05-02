@@ -132,7 +132,7 @@ def generate_excel_report(
     sellers = [str(s)[:8] + "..." for s in sellers]
 
     # Note: Ensure this matches your Best Sellers dataframe column name!
-    seller_revenue = df_best_sellers["total_revenue"].to_list()
+    seller_revenue = df_best_sellers["total_product_value"].to_list()
 
     ws_sellers.write("A1", "Seller ID", header_format)
     ws_sellers.write("B1", "Revenue", header_format)

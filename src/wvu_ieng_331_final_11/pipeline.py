@@ -1,159 +1,116 @@
+# Imports
+
 import argparse
 from pathlib import Path
-from typing import Optional, Sequence
 
 import altair as alt
 import duckdb
 import polars as pl
 from loguru import logger
 
-from wvu_ieng_331_final_11.queries import get_abc_analysis
-
-# Import the modules
+from wvu_ieng_331_final_11.queries import (
+    get_abc_analysis,
+    get_best_sellers,
+    get_monthly_revenue,
+)
+from wvu_ieng_331_final_11.report import generate_excel_report
 from wvu_ieng_331_final_11.validation import validate_database
 
 
-def parse_args(args: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    """
-    Parses command-line arguments for the pipeline.
-
-    Args:
-        args (Optional[Sequence[str]]): Command-line arguments. Defaults to sys.argv.
-
-    Returns:
-        argparse.Namespace: Parsed arguments containing start_date, end_date, and db_path.
-    """
-    parser = argparse.ArgumentParser(description="Olist E-commerce Data Pipeline")
-
-    # We use dates far in the past/future as defaults so running with no arguments
-    # produces the full, unfiltered analysis
-    parser.add_argument(
-        "--start-date",
-        type=str,
-        default="2000-01-01",
-        help="Start date for analysis (YYYY-MM-DD)",
-    )
-    parser.add_argument(
-        "--end-date",
-        type=str,
-        default="2099-12-31",
-        help="End date for analysis (YYYY-MM-DD)",
-    )
+def parse_args():
+    """Parses command-line arguments for the pipeline."""
+    parser = argparse.ArgumentParser(description="Olist Data Pipeline")
     parser.add_argument(
         "--db-path",
         type=str,
         default="data/olist.duckdb",
-        help="Path to the DuckDB database file",
+        help="Path to DuckDB database",
     )
-
-    return parser.parse_args(args)
-
-
-def main(args: Optional[Sequence[str]] = None) -> None:
-    """
-    Main entry point for the data pipeline. Directs validation,
-    querying, processing, and output generation.
-
-    Args:
-        args (Optional[Sequence[str]]): Command-line arguments.
-
-    Raises:
-        FileNotFoundError: If the database file is missing.
-        duckdb.Error: If a database operation fails.
-        ValueError: If dates or parameters are invalid.
-        OSError: If output files cannot be written.
-    """
-    parsed_args = parse_args(args)
-    db_path = Path(parsed_args.db_path)
-
-    # 1. Create output directory if it doesn't exist
-    output_dir = Path("output")
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    logger.info(
-        f"Starting pipeline with start_date={parsed_args.start_date}, end_date={parsed_args.end_date}"
+    parser.add_argument(
+        "--start-date", type=str, default="2016-01-01", help="Start date (YYYY-MM-DD)"
     )
+    parser.add_argument(
+        "--end-date", type=str, default="2018-12-31", help="End date (YYYY-MM-DD)"
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    db_path = Path(args.db_path)
+
+    # 1. Error Handling: Check if database file exists
+    if not db_path.exists():
+        logger.error(f"Database file not found: {db_path}")
+        raise FileNotFoundError(f"Database file not found: {db_path}")
 
     try:
-        # 2. Validation Layer
-        logger.info("Running validation...")
-        is_valid = validate_database(db_path)
-        if not is_valid:
+        # 2. Validation
+        logger.info("Running database validation...")
+        if not validate_database(db_path):
             logger.warning(
-                "Validation flagged warnings. Proceeding with pipeline anyway."
+                "Validation failed, but continuing pipeline via graceful degradation..."
             )
 
-        # 3. Query Layer: Get the full scored dataset (ABC Analysis)
-        logger.info("Executing queries...")
-        df_detail = get_abc_analysis(
-            db_path=db_path,
-            start_date=parsed_args.start_date,
-            end_date=parsed_args.end_date,
-        )
+        # 3. Data Extraction (Queries)
+        logger.info("Executing database queries...")
+        df_abc_detail = get_abc_analysis(db_path, args.start_date, args.end_date)
+        df_best_sellers = get_best_sellers(db_path, args.start_date, args.end_date)
+        df_time = get_monthly_revenue(db_path, args.start_date, args.end_date)
 
-        # 4. Process Layer: Create aggregated summary metrics
-        logger.info("Processing data...")
+        # 4. Data Processing (Summarize ABC for the M2 requirements)
+        logger.info("Processing data for outputs...")
         df_summary = (
-            df_detail.group_by("abc_tier")
+            df_abc_detail.group_by("abc_tier")
             .agg(
-                [
-                    pl.col("product_id").count().alias("total_products"),
-                    pl.col("total_revenue").sum().round(2).alias("tier_revenue"),
-                ]
+                pl.sum("total_revenue").alias("total_revenue"),
+                pl.count().alias("item_count"),
             )
             .sort("abc_tier")
         )
 
-        # 5. Output Layer: Generate the 3 required files
-        logger.info("Generating output files...")
+        # Setup Output Directory
+        output_dir = Path("output")
+        output_dir.mkdir(exist_ok=True)
 
-        # Output 1: detail.parquet (The full scored/classified dataset)
-        detail_path = output_dir / "detail.parquet"
-        df_detail.write_parquet(detail_path)
-        logger.info(f"Saved detail data to {detail_path}")
+        # 5. Save M2 Outputs
+        logger.info("Saving M2 Outputs (CSV, Parquet, HTML)...")
 
-        # Output 2: summary.csv (Aggregated metrics)
-        summary_path = output_dir / "summary.csv"
-        df_summary.write_csv(summary_path)
-        logger.info(f"Saved summary data to {summary_path}")
+        # Detail Parquet
+        df_abc_detail.write_parquet(output_dir / "detail.parquet")
 
-        # Output 3: chart.html (Altair Visualization)
-        chart_path = output_dir / "chart.html"
+        # Summary CSV
+        df_summary.write_csv(output_dir / "summary.csv")
 
-        # Build a bar chart showing Revenue by ABC Tier
+        # Exploratory Altair Chart
+        pd_summary = df_summary.to_pandas()
         chart = (
-            alt.Chart(df_summary.to_pandas())
+            alt.Chart(pd_summary)
             .mark_bar()
             .encode(
-                x=alt.X("abc_tier:N", title="ABC Tier"),
-                y=alt.Y("tier_revenue:Q", title="Total Revenue ($)"),
-                color=alt.Color("abc_tier:N", legend=None),
-                tooltip=["abc_tier", "total_products", "tier_revenue"],
+                x=alt.X("abc_tier", title="ABC Tier"),
+                y=alt.Y("total_revenue", title="Total Revenue"),
             )
-            .properties(
-                title="Total Revenue by ABC Classification Tier", width=400, height=300
-            )
+            .properties(title="Revenue by ABC Tier")
+        )
+        chart.save(output_dir / "chart.html")
+
+        # 6. Save Final Deliverable (Excel Report)
+        logger.info("Generating Final Excel Deliverable...")
+        report_path = output_dir / "report.xlsx"
+
+        generate_excel_report(
+            df_abc=df_summary,
+            df_time=df_time,
+            df_best_sellers=df_best_sellers,
+            output_path=report_path,
         )
 
-        chart.save(str(chart_path))
-        logger.info(f"Saved chart visualization to {chart_path}")
-
+        logger.info(f"Successfully saved final deliverable to {report_path}")
         logger.info("Pipeline completed successfully!")
 
-    except FileNotFoundError as e:
-        logger.error(f"File not found error: {e}")
-        raise
     except duckdb.Error as e:
-        logger.error(f"Database error during pipeline execution: {e}")
-        raise
-    except ValueError as e:
-        logger.error(f"Parameter error: {e}")
-        raise
-    except OSError as e:
-        logger.error(f"System I/O error writing output files: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}")
+        logger.error(f"A DuckDB database error occurred: {e}")
         raise
 
 
