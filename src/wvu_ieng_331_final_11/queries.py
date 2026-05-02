@@ -193,3 +193,15 @@ def get_delivery_time(
             return con.execute(query, [start_date, end_date]).pl()
     except duckdb.Error as e:
         raise duckdb.Error(f"Failed to execute delivery time query: {e}")
+
+
+def get_monthly_revenue(
+    db_path: Union[str, Path], start_date: str, end_date: str
+) -> pl.DataFrame:
+    """Fetches total revenue grouped by month for time-series analysis."""
+    query_path = (
+        Path(__file__).resolve().parent.parent.parent / "sql" / "monthly_revenue.sql"
+    )
+    query = query_path.read_text()
+    with duckdb.connect(str(db_path)) as con:
+        return con.execute(query, parameters=[start_date, end_date]).pl()
