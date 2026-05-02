@@ -58,6 +58,10 @@ def main():
         df_best_sellers = get_best_sellers(db_path, args.start_date, args.end_date)
         df_time = get_monthly_revenue(db_path, args.start_date, args.end_date)
 
+        print("\n--- DEBUGGING ---")
+        print("Monthly Revenue Data:\n", df_time.head())
+        print("Best Sellers Data:\n", df_best_sellers.head())
+
         # 4. Data Processing (Summarize ABC for the M2 requirements)
         logger.info("Processing data for outputs...")
         df_summary = (

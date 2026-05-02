@@ -14,8 +14,8 @@ WITH ProductRevenue AS (
     JOIN orders o
         ON oi.order_id = o.order_id
     WHERE o.order_status NOT IN ('canceled', 'unavailable', 'invoiced')
-      AND o.order_purchase_timestamp >= $1 -- Start date parameter
-      AND o.order_purchase_timestamp <= $2 -- End date parameter
+    --  AND o.order_purchase_timestamp >= $1 -- Start date parameter
+    --  AND o.order_purchase_timestamp <= $2 -- End date parameter
     GROUP BY 1
 ),
 RunningTotals AS (
@@ -33,8 +33,8 @@ SELECT
     total_revenue,
     (cumulative_revenue / grand_total) * 100 as pct_of_total,
     CASE
-        WHEN (cumulative_revenue / grand_total) <= $3 THEN 'A' -- Tier A threshold
-        WHEN (cumulative_revenue / grand_total) <= $4 THEN 'B' -- Tier B threshold
+        WHEN (cumulative_revenue / grand_total) <= 0.80 THEN 'A' -- Tier A threshold
+        WHEN (cumulative_revenue / grand_total) <= 0.95 THEN 'B' -- Tier B threshold
         ELSE 'C'
     END as abc_tier
 FROM RunningTotals

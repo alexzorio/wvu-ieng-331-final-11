@@ -58,7 +58,7 @@ def get_abc_analysis(
     try:
         with duckdb.connect(str(db_path_obj)) as con:
             # Passes parameters as a list. DuckDB injects them into $1, $2, $3, $4
-            return con.execute(query, [start_date, end_date, tier_a, tier_b]).pl()
+            return con.execute(query).pl()
     except duckdb.Error as e:
         raise duckdb.Error(f"Failed to execute ABC analysis query: {e}")
 
@@ -146,7 +146,7 @@ def get_best_sellers(
 
     try:
         with duckdb.connect(str(db_path_obj)) as con:
-            return con.execute(query, [start_date, end_date]).pl()
+            return con.execute(query).pl()
     except duckdb.Error as e:
         raise duckdb.Error(f"Failed to execute best sellers query: {e}")
 
@@ -204,4 +204,4 @@ def get_monthly_revenue(
     )
     query = query_path.read_text()
     with duckdb.connect(str(db_path)) as con:
-        return con.execute(query, parameters=[start_date, end_date]).pl()
+        return con.execute(query).pl()

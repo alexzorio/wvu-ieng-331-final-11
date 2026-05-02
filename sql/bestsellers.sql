@@ -21,8 +21,8 @@ JOIN orders o
 -- We strictly want orders that were successfully filled and delivered
 -- $1 and $2 act as our start and end date parameters from the CLI
 WHERE o.order_status = 'delivered'
-  AND o.order_purchase_timestamp >= $1
-  AND o.order_purchase_timestamp <= $2
+--  AND o.order_purchase_timestamp >= CAST($1 AS TIMESTAMP)
+--  AND o.order_purchase_timestamp <= CAST($2 AS TIMESTAMP)
 GROUP BY
     s.seller_id
 ORDER BY
