@@ -19,7 +19,6 @@ cd wvu-ieng-331-final-11
 uv sync
 # place olist.duckdb in the data/ directory
 uv run wvu-ieng-331-final-11
-uv run wvu-ieng-331-final-11
 ```
 Also make sure that there is a "data" and "output" folder in your local cloned project. Data folder required olist.duckdb present for the pipeline to run.
 
